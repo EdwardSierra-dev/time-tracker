@@ -1,0 +1,17 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/services/profiles";
+import { LeadDashboard } from "./LeadDashboard";
+import { AnalystDashboard } from "./AnalystDashboard";
+
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const profile = await getProfile(user.id);
+  if (!profile) redirect("/login");
+
+  if (profile.role === "LEAD") return <LeadDashboard />;
+  return <AnalystDashboard profile={profile} />;
+}
