@@ -45,13 +45,11 @@ export default async function SettingsPage() {
         </>
       )}
 
-      {/* ANALYST-only: password change */}
-      {isAnalyst && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-base font-semibold text-gray-800">Seguridad</h2>
-          <ChangePasswordForm />
-        </section>
-      )}
+      {/* Password change — available for both roles */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-gray-800">Seguridad</h2>
+        <ChangePasswordForm />
+      </section>
     </div>
   );
 }

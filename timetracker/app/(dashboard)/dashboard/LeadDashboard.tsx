@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
-import { CLIENTS } from "@/lib/constants";
+import { CLIENTS, ENVIRONMENTS } from "@/lib/constants";
 import type { Profile } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
@@ -21,56 +22,42 @@ interface EntryRow {
   user_id: string;
 }
 
-interface AnalystSummary {
-  id: string;
-  name: string;
-  country: string;
-  hours: number;
-  client: string;
-  environment: string;
-}
-
 interface Filters {
   month: string;
   analystId: string;
   country: string;
   client: string;
+  environment: string;
 }
 
 function currentMonth() {
   return format(new Date(), "yyyy-MM");
 }
 
-function exportCSV(rows: EntryRow[], filters: Filters) {
-  const headers = ["Analista", "País", "Fecha", "Horas", "Cliente", "Ambiente", "Descripción"];
-  const lines = [
-    headers.join(","),
-    ...rows.map((r) =>
-      [
-        `"${r.analyst}"`,
-        `"${r.country}"`,
-        r.date,
-        r.hours,
-        `"${r.client}"`,
-        `"${r.environment}"`,
-        `"${r.description.replace(/"/g, '""')}"`,
-      ].join(",")
-    ),
+function exportXLSX(rows: EntryRow[], month: string) {
+  const data = [
+    ["Analista", "País", "Fecha", "Horas", "Cliente", "Ambiente", "Descripción"],
+    ...rows.map((r) => [
+      r.analyst,
+      r.country,
+      r.date,
+      r.hours,
+      r.client,
+      r.environment || "N/A",
+      r.description,
+    ]),
   ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `timetracker_${filters.month}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Entradas");
+  XLSX.writeFile(wb, `timetracker_${month}.xlsx`);
 }
 
 export function LeadDashboard() {
   const [analysts, setAnalysts] = useState<Profile[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
-  const [allRows, setAllRows] = useState<EntryRow[]>([]);
-  const [summaryRows, setSummaryRows] = useState<AnalystSummary[]>([]);
+  const [filteredRows, setFilteredRows] = useState<EntryRow[]>([]);
   const [totalHours, setTotalHours] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -79,6 +66,7 @@ export function LeadDashboard() {
     analystId: "",
     country: "",
     client: "",
+    environment: "",
   });
 
   useEffect(() => {
@@ -108,22 +96,23 @@ export function LeadDashboard() {
       .from("time_entries")
       .select("hours, user_id, date, client, environment, description, profiles!inner(full_name, country)")
       .gte("date", from)
-      .lte("date", to);
+      .lte("date", to)
+      .order("date", { ascending: false });
 
     if (filters.analystId) query = query.eq("user_id", filters.analystId);
     if (filters.client) query = query.eq("client", filters.client);
-    // country filter applied client-side after join
+    if (filters.environment) query = query.eq("environment", filters.environment);
+
     const { data, error } = await query;
 
     if (error || !data) {
-      setAllRows([]);
-      setSummaryRows([]);
+      setFilteredRows([]);
       setTotalHours(0);
       setLoading(false);
       return;
     }
 
-    // Flatten rows
+    // Flatten individual rows (no aggregation)
     let rows: EntryRow[] = data.map((e) => {
       const profile = e.profiles as unknown as { full_name: string; country: string };
       return {
@@ -143,23 +132,8 @@ export function LeadDashboard() {
       rows = rows.filter((r) => r.country === filters.country);
     }
 
-    // Aggregate per analyst — carry most recent client/environment
-    const map = new Map<string, AnalystSummary>();
-    for (const r of rows) {
-      const prev = map.get(r.user_id) ?? { id: r.user_id, name: r.analyst, country: r.country, hours: 0, client: r.client, environment: r.environment };
-      map.set(r.user_id, {
-        ...prev,
-        hours: prev.hours + r.hours,
-        client: r.client || prev.client,
-        environment: r.environment || prev.environment,
-      });
-    }
-
-    const sorted = Array.from(map.values()).sort((a, b) => b.hours - a.hours);
-    const total = sorted.reduce((s, r) => s + r.hours, 0);
-
-    setAllRows(rows);
-    setSummaryRows(sorted);
+    const total = rows.reduce((s, r) => s + r.hours, 0);
+    setFilteredRows(rows);
     setTotalHours(total);
     setLoading(false);
   }, [filters]);
@@ -171,6 +145,9 @@ export function LeadDashboard() {
   function setFilter(key: keyof Filters, value: string) {
     setFilters((f) => ({ ...f, [key]: value }));
   }
+
+  const hasActiveFilters =
+    filters.analystId || filters.country || filters.client || filters.environment;
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const d = new Date();
@@ -190,41 +167,94 @@ export function LeadDashboard() {
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => exportCSV(allRows, filters)}
-          disabled={allRows.length === 0}
+          onClick={() => exportXLSX(filteredRows, filters.month)}
+          disabled={filteredRows.length === 0}
         >
-          Exportar CSV
+          Exportar XLSX
         </Button>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
-        <Select id="month" label="Mes" value={filters.month} onChange={(e) => setFilter("month", e.target.value)} className="w-44">
+        <Select
+          id="month"
+          label="Mes"
+          value={filters.month}
+          onChange={(e) => setFilter("month", e.target.value)}
+          className="w-44"
+        >
           {monthOptions.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </Select>
 
-        <Select id="analyst" label="Analista" value={filters.analystId} onChange={(e) => setFilter("analystId", e.target.value)} placeholder="Todos" className="w-48">
+        <Select
+          id="analyst"
+          label="Analista"
+          value={filters.analystId}
+          onChange={(e) => setFilter("analystId", e.target.value)}
+          placeholder="Todos"
+          className="w-48"
+        >
           {analysts.map((a) => (
             <option key={a.id} value={a.id}>{a.full_name}</option>
           ))}
         </Select>
 
-        <Select id="country" label="País" value={filters.country} onChange={(e) => setFilter("country", e.target.value)} placeholder="Todos" className="w-40">
+        <Select
+          id="country"
+          label="País"
+          value={filters.country}
+          onChange={(e) => setFilter("country", e.target.value)}
+          placeholder="Todos"
+          className="w-40"
+        >
           {countries.map((c) => (
             <option key={c} value={c}>{c}</option>
           ))}
         </Select>
 
-        <Select id="client" label="Cliente" value={filters.client} onChange={(e) => setFilter("client", e.target.value)} placeholder="Todos" className="w-44">
+        <Select
+          id="client"
+          label="Cliente"
+          value={filters.client}
+          onChange={(e) => setFilter("client", e.target.value)}
+          placeholder="Todos"
+          className="w-44"
+        >
           {CLIENTS.map((c) => (
             <option key={c} value={c}>{c}</option>
           ))}
         </Select>
 
-        {(filters.analystId || filters.country || filters.client) && (
-          <Button variant="ghost" size="sm" onClick={() => setFilters((f) => ({ ...f, analystId: "", country: "", client: "" }))} className="self-end">
+        <Select
+          id="environment"
+          label="Ambiente"
+          value={filters.environment}
+          onChange={(e) => setFilter("environment", e.target.value)}
+          placeholder="Todos"
+          className="w-52"
+        >
+          {ENVIRONMENTS.map((env) => (
+            <option key={env} value={env}>{env}</option>
+          ))}
+        </Select>
+
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                analystId: "",
+                country: "",
+                client: "",
+                environment: "",
+              }))
+            }
+            className="self-end"
+          >
             Limpiar
           </Button>
         )}
@@ -237,8 +267,8 @@ export function LeadDashboard() {
           <p className="mt-1 text-2xl font-bold text-gray-900">{analysts.length}</p>
         </Card>
         <Card className="p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Analistas con horas</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{summaryRows.length}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Entradas (filtro)</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{filteredRows.length}</p>
         </Card>
         <Card className="p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total horas (filtro)</p>
@@ -249,11 +279,11 @@ export function LeadDashboard() {
       {/* Table */}
       <Card>
         <div className="border-b px-6 py-4">
-          <h2 className="text-sm font-semibold text-gray-900">Detalle por analista</h2>
+          <h2 className="text-sm font-semibold text-gray-900">Detalle de entradas</h2>
         </div>
         {loading ? (
           <PageSpinner />
-        ) : summaryRows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <p className="px-6 py-8 text-sm text-gray-400">Sin registros para los filtros seleccionados.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -262,26 +292,32 @@ export function LeadDashboard() {
                 <tr className="border-b bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   <th className="px-4 py-3">Analista</th>
                   <th className="px-4 py-3">País</th>
+                  <th className="px-4 py-3">Fecha</th>
                   <th className="px-4 py-3">Cliente</th>
                   <th className="px-4 py-3">Ambiente</th>
                   <th className="px-4 py-3 text-right">Horas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {summaryRows.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
+                {filteredRows.map((r, idx) => (
+                  <tr key={`${r.user_id}-${r.date}-${idx}`} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{r.analyst}</td>
                     <td className="px-4 py-3 text-gray-500">{r.country || "—"}</td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{r.date}</td>
                     <td className="px-4 py-3 text-gray-500">{r.client || "N/A"}</td>
                     <td className="px-4 py-3 text-gray-500">{r.environment || "N/A"}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-900">{r.hours.toFixed(1)}h</td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                      {r.hours.toFixed(1)}h
+                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t bg-gray-50">
-                  <td className="px-4 py-3 font-semibold text-gray-900" colSpan={4}>Total</td>
-                  <td className="px-4 py-3 text-right font-bold text-gray-900">{totalHours.toFixed(1)}h</td>
+                  <td className="px-4 py-3 font-semibold text-gray-900" colSpan={5}>Total</td>
+                  <td className="px-4 py-3 text-right font-bold text-gray-900">
+                    {totalHours.toFixed(1)}h
+                  </td>
                 </tr>
               </tfoot>
             </table>

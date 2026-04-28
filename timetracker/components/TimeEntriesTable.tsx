@@ -58,6 +58,7 @@ export function TimeEntriesTable({ entries, currentUser, onRefetch }: TimeEntrie
               <th className="px-4 py-3">Analista</th>
               <th className="px-4 py-3">Proyecto</th>
               <th className="px-4 py-3">Cliente</th>
+              <th className="px-4 py-3">Ambiente</th>
               <th className="px-4 py-3">Fecha</th>
               <th className="px-4 py-3 text-right">Horas</th>
               <th className="px-4 py-3">Descripción</th>
@@ -80,6 +81,7 @@ export function TimeEntriesTable({ entries, currentUser, onRefetch }: TimeEntrie
                     ) : "—"}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{entry.client || "—"}</td>
+                  <td className="px-4 py-3 text-gray-600">{entry.environment || "N/A"}</td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                     {format(parseISO(entry.date), "dd/MM/yyyy")}
                   </td>

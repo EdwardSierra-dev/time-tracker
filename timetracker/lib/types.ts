@@ -41,6 +41,7 @@ export interface TimeEntryFilters {
   client?: string;
   environment?: string;
   analystId?: string;
+  projectId?: string;
 }
 
 export type AuditActionType =
