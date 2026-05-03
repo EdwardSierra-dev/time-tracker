@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
@@ -59,6 +60,13 @@ export function LoginForm() {
       <Button type="submit" loading={loading} className="w-full mt-2">
         Iniciar sesión
       </Button>
+
+      <p className="text-center text-sm text-gray-500">
+        ¿No tienes cuenta?{" "}
+        <Link href="/register" className="font-medium text-blue-600 hover:underline">
+          Crear cuenta
+        </Link>
+      </p>
     </form>
   );
 }

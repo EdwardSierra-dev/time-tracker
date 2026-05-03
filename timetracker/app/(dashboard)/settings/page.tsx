@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/services/profiles";
 import { getAllHourLimits } from "@/services/hourLimits";
 import { HourLimitsClient } from "./HourLimitsClient";
+import { ChangePasswordForm } from "./ChangePasswordForm";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -26,16 +27,17 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      {isLead ? (
+      {isLead && (
         <section className="flex flex-col gap-3">
           <h2 className="text-base font-semibold text-gray-800">Límites de horas por país</h2>
           <HourLimitsClient initialLimits={limits} />
         </section>
-      ) : (
-        <p className="text-sm text-gray-500">
-          Para cambiar tu contraseña o actualizar tus datos, contacta a tu administrador.
-        </p>
       )}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-gray-800">Seguridad</h2>
+        <ChangePasswordForm />
+      </section>
     </div>
   );
 }

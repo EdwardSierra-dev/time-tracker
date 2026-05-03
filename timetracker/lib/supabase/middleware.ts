@@ -31,11 +31,14 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  if (!user && !pathname.startsWith("/login")) {
+  const publicPaths = ["/login", "/register"];
+  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
+
+  if (!user && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (user && pathname === "/login") {
+  if (user && isPublic) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
