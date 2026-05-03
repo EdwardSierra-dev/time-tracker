@@ -1,3 +1,6 @@
+// Allowed email domains for Rhiscom corporate accounts
+export const ALLOWED_EMAIL_DOMAINS = ["rhiscom.cl", "rhiscom.com"] as const;
+
 export const CLIENTS = [
   "RHISCOM",
   "CARREFOUR",

@@ -32,6 +32,7 @@ export function useTimeEntries(filters: TimeEntryFilters = {}, page = 1) {
     if (filters.client) query = query.eq("client", filters.client);
     if (filters.environment) query = query.eq("environment", filters.environment);
     if (filters.analystId) query = query.eq("user_id", filters.analystId);
+    if (filters.country) query = query.eq("country", filters.country);
 
     const { data, error: err, count } = await query;
     if (err) setError(err.message);
@@ -46,6 +47,7 @@ export function useTimeEntries(filters: TimeEntryFilters = {}, page = 1) {
     filters.client,
     filters.environment,
     filters.analystId,
+    filters.country,
     page,
   ]);
 

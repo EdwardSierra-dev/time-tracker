@@ -71,15 +71,30 @@ export function LeadDashboard() {
 
   useEffect(() => {
     const supabase = createClient();
+
+    // Load analysts
     supabase
       .from("profiles")
       .select("id, full_name, role, country")
       .eq("role", "ANALYST")
       .order("full_name")
       .then(({ data }) => {
-        const list = (data as Profile[]) ?? [];
-        setAnalysts(list);
-        const unique = Array.from(new Set(list.map((a) => a.country).filter(Boolean))).sort();
+        setAnalysts((data as Profile[]) ?? []);
+      });
+
+    // Load countries from hour_limits — the single source of truth for available countries
+    supabase
+      .from("hour_limits")
+      .select("country")
+      .order("country")
+      .then(({ data }) => {
+        const unique = [
+          ...new Set(
+            (data ?? [])
+              .map((r) => r.country as string)
+              .filter((c) => c && c.trim() !== "")
+          ),
+        ];
         setCountries(unique);
       });
   }, []);
@@ -94,7 +109,7 @@ export function LeadDashboard() {
 
     let query = supabase
       .from("time_entries")
-      .select("hours, user_id, date, client, environment, description, profiles!inner(full_name, country)")
+      .select("hours, user_id, date, client, environment, description, country, profiles!inner(full_name, country)")
       .gte("date", from)
       .lte("date", to)
       .order("date", { ascending: false });
@@ -102,6 +117,7 @@ export function LeadDashboard() {
     if (filters.analystId) query = query.eq("user_id", filters.analystId);
     if (filters.client) query = query.eq("client", filters.client);
     if (filters.environment) query = query.eq("environment", filters.environment);
+    if (filters.country) query = query.eq("country", filters.country);
 
     const { data, error } = await query;
 
@@ -113,11 +129,11 @@ export function LeadDashboard() {
     }
 
     // Flatten individual rows (no aggregation)
-    let rows: EntryRow[] = data.map((e) => {
+    const rows: EntryRow[] = data.map((e) => {
       const profile = e.profiles as unknown as { full_name: string; country: string };
       return {
         analyst: profile?.full_name ?? "—",
-        country: profile?.country ?? "—",
+        country: (e.country as string) || profile?.country || "—",
         date: e.date,
         hours: Number(e.hours),
         client: e.client ?? "",
@@ -126,11 +142,6 @@ export function LeadDashboard() {
         user_id: e.user_id,
       };
     });
-
-    // Apply country filter client-side (Supabase join filter limitation)
-    if (filters.country) {
-      rows = rows.filter((r) => r.country === filters.country);
-    }
 
     const total = rows.reduce((s, r) => s + r.hours, 0);
     setFilteredRows(rows);

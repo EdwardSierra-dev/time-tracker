@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/services/profiles";
+import { upsertProfile } from "@/services/profiles";
 import { Navbar } from "@/components/Navbar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -9,8 +9,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!user) redirect("/login");
 
-  const profile = await getProfile(user.id);
+  // Ensure profile exists — creates it on first login if the DB trigger didn't fire
+  const profile = await upsertProfile(user.id, user.email ?? "");
   if (!profile) redirect("/login");
+
+  // Country is required for hour tracking — send user to complete their profile
+  if (!profile.country) redirect("/complete-profile");
 
   return (
     <div className="min-h-screen bg-gray-50">

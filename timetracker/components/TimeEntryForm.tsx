@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { CLIENTS, TASKS, ENVIRONMENTS } from "@/lib/constants";
 import type { TimeEntry } from "@/lib/types";
@@ -21,9 +21,11 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 export function TimeEntryForm({ userId, entry, onSuccess, onCancel }: TimeEntryFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [countries, setCountries] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     date: entry?.date ?? todayStr(),
+    country: entry?.country ?? "",
     client: entry?.client ?? "",
     environment: entry?.environment ?? "",
     task: entry?.task ?? "",
@@ -32,6 +34,37 @@ export function TimeEntryForm({ userId, entry, onSuccess, onCancel }: TimeEntryF
   });
 
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
+
+  // Load available countries from hour_limits and pre-fill from user profile
+  useEffect(() => {
+    const supabase = createClient();
+
+    // Fetch countries list
+    supabase
+      .from("hour_limits")
+      .select("country")
+      .order("country")
+      .then(({ data }) => {
+        const list = (data ?? [])
+          .map((r) => r.country as string)
+          .filter((c) => c && c.trim() !== "");
+        setCountries([...new Set(list)]);
+      });
+
+    // Pre-fill country from user profile only when creating a new entry
+    if (!entry) {
+      supabase
+        .from("profiles")
+        .select("country")
+        .eq("id", userId)
+        .single()
+        .then(({ data }) => {
+          if (data?.country) {
+            setForm((f) => ({ ...f, country: data.country as string }));
+          }
+        });
+    }
+  }, [userId, entry]);
 
   function set(field: keyof typeof form, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -54,6 +87,7 @@ export function TimeEntryForm({ userId, entry, onSuccess, onCancel }: TimeEntryF
     else if (hours > 24)
       errors.hours = "No puedes registrar más de 24 horas en un día.";
 
+    if (!form.country) errors.country = "El país es requerido.";
     if (!form.client) errors.client = "El cliente es requerido.";
     if (!form.task) errors.task = "La tarea es requerida.";
     if (!form.environment) errors.environment = "El ambiente es requerido.";
@@ -82,16 +116,19 @@ export function TimeEntryForm({ userId, entry, onSuccess, onCancel }: TimeEntryF
       (existing ?? []).reduce((s, e) => s + Number(e.hours), 0) + hours;
 
     if (totalHours > 24) {
-      setFieldErrors((fe) => ({ ...fe, hours: "Superas el límite de 24 horas diarias con esta entrada." }));
+      setFieldErrors((fe) => ({
+        ...fe,
+        hours: "Superas el límite de 24 horas diarias con esta entrada.",
+      }));
       setLoading(false);
       return;
     }
 
-    // Uppercase text fields before storing
     const payload = {
       user_id: userId,
       date: form.date,
       hours,
+      country: form.country.toUpperCase(),
       client: form.client.toUpperCase(),
       environment: form.environment.toUpperCase(),
       task: form.task.toUpperCase(),
@@ -139,6 +176,19 @@ export function TimeEntryForm({ userId, entry, onSuccess, onCancel }: TimeEntryF
           required
         />
       </div>
+
+      <Select
+        id="country"
+        label="País *"
+        value={form.country}
+        onChange={(e) => set("country", e.target.value)}
+        placeholder="Seleccionar país"
+        error={fieldErrors.country}
+      >
+        {countries.map((c) => (
+          <option key={c} value={c}>{c}</option>
+        ))}
+      </Select>
 
       <div className="grid grid-cols-2 gap-4">
         <Select

@@ -16,7 +16,7 @@ export async function AnalystDashboard({ profile }: Props) {
 
   const [summary, limits] = await Promise.all([
     getHoursSummary(profile.id, today, weekStart, monthStart),
-    getHourLimitByCountry(profile.country),
+    getHourLimitByCountry(profile.country ?? ""),
   ]);
 
   const dailyLimit = limits?.daily_limit ?? 0;

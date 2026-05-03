@@ -2,9 +2,11 @@ export type Role = "LEAD" | "ANALYST";
 
 export interface Profile {
   id: string;
+  email: string;
   full_name: string;
   role: Role;
-  country: string;
+  country: string | null;
+  created_at: string;
 }
 
 export interface Project {
@@ -18,6 +20,7 @@ export interface TimeEntry {
   project_id: string;
   date: string;
   hours: number;
+  country: string | null;
   client: string;
   environment: string;
   task: string;
@@ -42,6 +45,7 @@ export interface TimeEntryFilters {
   environment?: string;
   analystId?: string;
   projectId?: string;
+  country?: string;
 }
 
 export type AuditActionType = "UPDATE_LIMITS";

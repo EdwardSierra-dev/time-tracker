@@ -31,8 +31,11 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const publicPaths = ["/login", "/register"];
+  const publicPaths = ["/login", "/register", "/api/auth/register"];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
+
+  // /complete-profile is only for authenticated users — don't redirect them away
+  const isCompleteProfile = pathname.startsWith("/complete-profile");
 
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -40,6 +43,11 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isPublic) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Prevent unauthenticated access to complete-profile
+  if (!user && isCompleteProfile) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return supabaseResponse;

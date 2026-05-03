@@ -2,14 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
+import { ALLOWED_EMAIL_DOMAINS } from "@/lib/constants";
 
-export function RegisterForm() {
+interface Props {
+  countries: string[];
+}
+
+export function RegisterForm({ countries }: Props) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [country, setCountry] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +26,13 @@ export function RegisterForm() {
     e.preventDefault();
     setError(null);
 
-    // Client-side validation
+    // Validate Rhiscom corporate email domain
+    const emailDomain = email.split("@")[1]?.toLowerCase();
+    if (!emailDomain || !ALLOWED_EMAIL_DOMAINS.includes(emailDomain as typeof ALLOWED_EMAIL_DOMAINS[number])) {
+      setError("Solo se permiten correos corporativos de Rhiscom (rhiscom.cl o rhiscom.com)");
+      return;
+    }
+
     if (password.length < 6) {
       setError("La contraseña debe tener al menos 6 caracteres.");
       return;
@@ -33,47 +45,17 @@ export function RegisterForm() {
     setLoading(true);
 
     try {
-      const supabase = createClient();
-
-      // 1. Create user in Supabase Auth
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: fullName },
-        },
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, full_name: fullName, country }),
       });
 
-      if (signUpError) {
-        setError(signUpError.message);
+      const json = await res.json();
+
+      if (!res.ok) {
+        setError(json.error ?? "Ocurrió un error inesperado. Intenta nuevamente.");
         return;
-      }
-
-      const user = data.user;
-      if (!user) {
-        setError("No se pudo crear el usuario. Intenta nuevamente.");
-        return;
-      }
-
-      // 2. Ensure profile exists — upsert to avoid duplicates / race conditions
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            id: user.id,
-            email: user.email ?? email,
-            full_name: fullName,
-            role: "ANALYST",
-            country: "",
-            created_at: new Date().toISOString(),
-          },
-          { onConflict: "id" }
-        );
-
-      if (profileError) {
-        // Auth user was created — log the issue but don't block the UX.
-        // The profile will be auto-created on first login via upsertProfile.
-        console.error("[RegisterForm] Profile upsert failed:", profileError.message);
       }
 
       setShowSuccess(true);
@@ -108,6 +90,18 @@ export function RegisterForm() {
           autoComplete="email"
           required
         />
+        <Select
+          id="country"
+          label="País"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          placeholder="Selecciona tu país"
+          required
+        >
+          {countries.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </Select>
         <Input
           id="password"
           label="Contraseña"
