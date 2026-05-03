@@ -44,10 +44,7 @@ export interface TimeEntryFilters {
   projectId?: string;
 }
 
-export type AuditActionType =
-  | "CREATE_ANALYST"
-  | "UPDATE_LIMITS"
-  | "CHANGE_PASSWORD";
+export type AuditActionType = "UPDATE_LIMITS";
 
 export interface AuditLog {
   id: string;
