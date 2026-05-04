@@ -1,140 +1,119 @@
 # TimeTracker
 
-Aplicación de gestión de horas (timesheets) con control de acceso por roles, construida con Next.js 15, Supabase y Tailwind CSS.
+Internal time tracking system for Rhiscom. Analysts log hours against clients, environments, and tasks. Leads monitor all activity across countries, filter by any dimension, and export reports to Excel.
 
 ---
 
-## Stack
+## Features
 
-- **Frontend**: Next.js 15 (App Router) + TypeScript
-- **Backend**: Supabase (PostgreSQL + Auth + RLS)
-- **Estilos**: Tailwind CSS
-- **Fechas**: date-fns
+### Time Entry Management
+- Log hours per day with client, environment, task, project, country, and description
+- 24-hour daily cap enforced on both client and server
+- Edit and delete entries within the current calendar week
+- Paginated entry list with date-range, client, and environment filters
+
+### Analyst Dashboard
+- Circular progress charts for daily, weekly, and monthly hours
+- Limits sourced from the `hour_limits` table for the analyst's assigned country
+
+### Lead Dashboard
+- Global view of all analysts' entries for any month
+- Filter by analyst, country, client, and environment simultaneously
+- Summary cards: active analysts, entry count, total hours
+- One-click XLSX export of the current filtered view
+
+### Role-Based Behavior
+| Feature | ANALYST | LEAD |
+|---|---|---|
+| View own entries | ✅ | ✅ |
+| View all entries | ❌ | ✅ (dashboard only) |
+| Edit/delete entries | Current week only | ❌ |
+| Manage hour limits | ❌ | ✅ |
+| View audit log | ❌ | ✅ |
+
+### Profile & Settings
+- Country selection on first login (required before accessing the app)
+- Password change via Supabase Auth
+- Hour limits management per country (LEAD only)
 
 ---
 
-## Roles
+## Tech Stack
 
-| Rol      | Capacidades |
-|----------|-------------|
-| LEAD     | Ver todas las entradas, filtrar por analista/cliente/proyecto/fecha, configurar límites de horas por país |
-| ANALYST  | Ver y gestionar solo sus propias entradas, ver barras de progreso diario/semanal/mensual |
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript |
+| Database & Auth | Supabase (PostgreSQL + Supabase Auth) |
+| Supabase client | `@supabase/ssr` (cookie-based sessions) |
+| Styling | Tailwind CSS |
+| Date utilities | `date-fns` |
+| Excel export | `xlsx` (SheetJS) |
 
 ---
 
-## Setup paso a paso
+## Setup
 
-### 1. Clonar e instalar dependencias
+### 1. Install dependencies
 
 ```bash
 cd timetracker
 npm install
 ```
 
-### 2. Crear proyecto en Supabase
+### 2. Environment variables
 
-1. Ir a [supabase.com](https://supabase.com) y crear un nuevo proyecto.
-2. Copiar la **Project URL** y la **anon public key** desde *Settings → API*.
-
-### 3. Configurar variables de entorno
+Copy `.env.example` to `.env.local` and fill in the values:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Editar `.env.local`:
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-only) |
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
-SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key   # Settings → API → service_role
+### 3. Database setup
+
+Run the SQL migrations in order against your Supabase project (SQL Editor or CLI):
+
+```
+supabase/01_schema.sql
+supabase/02_rls.sql
+supabase/03_seed.sql
+supabase/04_uppercase_normalization.sql
+supabase/05_audit_logs_and_username.sql
+supabase/07_country_nullable.sql
+supabase/08_hour_limits_public_read.sql
+supabase/09_time_entries_country.sql
+supabase/10_email_domain_restriction.sql
 ```
 
-### 4. Ejecutar scripts SQL en Supabase
-
-En el **SQL Editor** de Supabase, ejecutar en orden:
-
-1. `supabase/01_schema.sql` — Tablas, enums y trigger de auto-perfil
-2. `supabase/02_rls.sql` — Políticas de Row Level Security
-3. `supabase/03_seed.sql` — Proyectos y límites de horas de ejemplo
-
-### 5. Crear usuarios de prueba
-
-En Supabase → **Authentication → Users → Add user**, crear:
-
-| Email | Password | Metadata (JSON) |
-|-------|----------|-----------------|
-| lead@example.com | password123 | `{"full_name":"Laura Gómez","role":"LEAD","country":"Argentina"}` |
-| ana@example.com | password123 | `{"full_name":"Ana Martínez","role":"ANALYST","country":"Argentina"}` |
-| carlos@example.com | password123 | `{"full_name":"Carlos Ruiz","role":"ANALYST","country":"Colombia"}` |
-
-> El trigger `on_auth_user_created` crea automáticamente el perfil en la tabla `profiles`.
-
-### 6. Correr localmente
+### 4. Run locally
 
 ```bash
 npm run dev
 ```
 
-Abrir [http://localhost:3000](http://localhost:3000)
+App runs at `http://localhost:3000`. Root redirects to `/dashboard`.
 
 ---
 
-## Estructura del proyecto
+## Key Design Decisions
 
-```
-timetracker/
-├── app/
-│   ├── (auth)/login/          # Página de login
-│   └── (dashboard)/
-│       ├── layout.tsx          # Layout con Navbar (server component)
-│       ├── dashboard/          # Dashboard (LEAD global / ANALYST personal)
-│       ├── entries/            # Lista y gestión de entradas
-│       └── settings/           # Configuración de límites (solo LEAD)
-├── components/
-│   ├── ui/                     # Button, Input, Select, Card, Modal, etc.
-│   ├── Navbar.tsx
-│   ├── TimeEntryForm.tsx
-│   ├── TimeEntriesTable.tsx
-│   ├── FiltersBar.tsx
-│   └── ProgressBar.tsx
-├── hooks/
-│   ├── useProfile.ts
-│   └── useTimeEntries.ts
-├── lib/
-│   ├── types.ts
-│   └── supabase/
-│       ├── client.ts           # Browser client
-│       ├── server.ts           # Server component client
-│       └── middleware.ts       # Session refresh
-├── services/                   # Lógica de acceso a datos (server-side)
-│   ├── profiles.ts
-│   ├── projects.ts
-│   ├── timeEntries.ts
-│   └── hourLimits.ts
-├── supabase/
-│   ├── 01_schema.sql
-│   ├── 02_rls.sql
-│   └── 03_seed.sql
-├── middleware.ts               # Auth guard global
-└── .env.example
-```
+**No in-app user creation by default.**
+Users are provisioned via the Supabase Auth dashboard or the `/register` route (which uses the admin API with `email_confirm: true`). This keeps user lifecycle management outside the application.
 
----
+**Email domain restriction.**
+Only `@rhiscom.cl` and `@rhiscom.com` addresses are accepted. Enforced at three layers: frontend form validation, API route, and a database trigger on the `profiles` table.
 
-## Seguridad (RLS)
+**Profiles are separate from `auth.users`.**
+The `profiles` table extends Supabase's `auth.users` with `full_name`, `role`, and `country`. A database trigger (`handle_new_user`) creates the profile automatically on signup. `upsertProfile` in the dashboard layout acts as a fallback for users created without metadata.
 
-Las políticas de Row Level Security garantizan que:
+**Country is sourced from `hour_limits`.**
+The `hour_limits` table is the single source of truth for valid countries. All country dropdowns across the app query this table — no hardcoded country lists.
 
-- **ANALYST** solo puede SELECT/INSERT/UPDATE/DELETE sus propias entradas.
-- **LEAD** puede SELECT todas las entradas, pero NO puede modificar las de otros.
-- Los límites de horas y proyectos solo pueden ser gestionados por LEADs.
-- No hay forma de bypassear estas reglas desde el cliente.
-
----
-
-## Reglas de negocio
-
-- Máximo 24 horas por día por usuario (validado en cliente y en DB con CHECK constraint).
-- Edición/eliminación de entradas solo permitida dentro de la semana actual.
-- Los límites de progreso se calculan según el país del analista.
+**Sessions are cookie-based.**
+`@supabase/ssr` handles session cookies via Next.js middleware, keeping the session alive across server and client components without manual token management.
