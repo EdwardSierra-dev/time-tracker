@@ -18,3 +18,7 @@ Thumbs.db
 dist/
 build/
 .next/
+
+# prompts
+requirements/
+*.md
